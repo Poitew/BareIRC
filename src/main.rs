@@ -1,8 +1,9 @@
 use std::io;
-use std::net;
-use std::collections::HashSet;
+use irc::IrcClient;
 
 fn main() {
+    let client = IrcClient::new();
+
     loop {
         let mut command = String::new();
 
@@ -11,65 +12,20 @@ fn main() {
             .read_line(&mut command)
             .unwrap();
 
-        if let Some(argv) = parse_command(&command) {
-            execute_command(argv);
-        }
-    }
-}
+        match client.parse_command(&command) {
+            Some(argv) => match client.lexer(&argv) {
+                Ok(tokenized_cmd) => {
+                    client.execute_command(tokenized_cmd);
+                }
 
-fn parse_command(input: &String) -> Option<Vec<String>> {
-    let commands: HashSet<String> = HashSet::from([
-        "NICK", "USER", "JOIN", "PART", "PRIVMSG", "NOTICE", "QUIT", "PING", 
-        "PONG", "MODE", "TOPIC", "WHO", "WHOIS", "LIST", "KICK", "INVITE"
-    ])
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
+                Err(_) => {
+                    eprintln!("Error while lexing the command, check the number of arguments");
+                }
+            },
 
-    if let Some(cmd) = input.strip_prefix('/') {
-        let argv: Vec<String> = cmd
-            .split_whitespace()
-            .map(|s| s.to_uppercase())
-            .collect();
-        
-        if let Some(command) = argv.first() {
-            if commands.contains(command) {
-                Some(argv)
-            }
-            else {
-                eprintln!("Error: Invalid command, for a list of valid command type /help");
-                None
+            None => {
+                eprintln!("Error while parsing the command");
             }
         }
-        else {
-            eprintln!("Error: A command is expected after the prefix '/', for a list of valid command type /help");
-            None
-        }
-    }
-    else {
-        eprintln!("Error: Commands starts with a '/' ");
-        None
-    }
-}
-
-fn execute_command(argv: Vec<String>) {
-    match argv[0] {
-        "NICK" =>
-        "USER" =>
-        "JOIN" =>
-        "PART" =>
-        "PRIVMSG" =>
-        "NOTICE" =>
-        "QUIT" =>
-        "PING" => 
-        "PONG" =>
-        "MODE" =>
-        "TOPIC" =>
-        "WHO" =>
-        "WHOIS" =>
-        "LIST" =>
-        "KICK" =>
-        "INVITE"=>
-        _ => unreachable!("Unknow command") // Case is unreachable because there already is a check in 'parse_command'
     }
 }
