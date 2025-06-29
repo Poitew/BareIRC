@@ -1,9 +1,16 @@
+#![allow(unused)]
 use std::collections::HashSet;
 use std::net::TcpStream;
+use std::io::{
+    Write,
+    BufRead,
+    BufReader,
+};
 
-pub enum Command {
+pub enum COMMAND {
     NICK (String),
     USER {username: String, realname: String},
+    SERVER (String),
     JOIN (String),
     PART (String),
     PRIVMSG {target: String, message: String},
@@ -20,17 +27,27 @@ pub enum Command {
     INVITE {nick: String, channel: String},
 }
 
-pub struct IrcClient;
+pub struct IrcClient {
+    nick: String,
+    username: String,
+    realname: String,
+    connection: Option<TcpStream>,
+}
 
 impl IrcClient {
     pub fn new() -> Self {
-        IrcClient
+        let nick = String::new();
+        let username = String::new();
+        let realname = String::new();
+        let connection = None;
+
+        IrcClient{nick, username, realname, connection}
     }
 
-    pub fn parse_command(&self, input: &String) -> Option<Vec<String>> {
+    pub fn parse_command(&self, input: &String) -> Result<Vec<String>, String> {
         let commands: HashSet<String> = HashSet::from([
-            "NICK", "USER", "JOIN", "PART", "PRIVMSG", "NOTICE", "QUIT", "PING", 
-            "PONG", "MODE", "TOPIC", "WHO", "WHOIS", "LIST", "KICK", "INVITE"
+            "NICK", "USER", "SERVER", "JOIN", "PART", "PRIVMSG", "NOTICE", "QUIT", "PING", 
+            "PONG", "MODE", "TOPIC", "WHO", "WHOIS", "LIST", "KICK", "INVITE",
         ])
         .iter()
         .map(|s| s.to_string())
@@ -44,26 +61,23 @@ impl IrcClient {
             
             if let Some(command) = argv.first() {
                 if commands.contains(command) {
-                    Some(argv)
+                    Ok(argv)
                 }
                 else {
-                    eprintln!("Error: Invalid command, for a list of valid command type /help");
-                    None
+                    return Err("Invalid command, for a list of valid command type /help".to_string());
                 }
             }
             else {
-                eprintln!("Error: A command is expected after the prefix '/', for a list of valid command type /help");
-                None
+                return Err("A command is expected after the prefix '/', for a list of valid command type /help".to_string())
             }
         }
         else {
-            eprintln!("Error: Commands starts with a '/' ");
-            None
+            return Err("Commands starts with a '/'".to_string())
         }
     }
 
-    pub fn lexer(&self, argv: &[String]) -> Result<Command, ()> {
-        use Command::*;
+    pub fn lexer(&self, argv: &[String]) -> Result<COMMAND, ()> {
+        use COMMAND::*;
 
         let Some(cmd) = argv.get(0) else {
             return Err(());
@@ -84,6 +98,8 @@ impl IrcClient {
                 username: arg!(1),
                 realname: arg!(2),
             }),
+
+            "SERVER"    => Ok(SERVER(arg!(1))),
 
             "JOIN"      => Ok(JOIN(arg!(1))),
 
@@ -136,92 +152,131 @@ impl IrcClient {
         }
     }
 
-    pub fn execute_command(&self, cmd: Command) {
-        use Command::*;
+    pub fn execute_command(&mut self, cmd: COMMAND) {
+        use COMMAND::*;
 
         match cmd {
-            NICK (nick)                     => Self::execute_nick(nick),
-            USER {username, realname }      => Self::execute_user(username, realname),
-            JOIN (channel)                  => Self::execute_join(channel),
-            PART (channel)                  => Self::execute_part(channel),
-            PRIVMSG {target, message}       => Self::execute_privmsg(target, message),
-            NOTICE {target, message}        => Self::execute_notice(target, message),
-            QUIT (message)                  => Self::execute_quit(message),
-            PING (server)                   => Self::execute_ping(server),
-            PONG (server)                   => Self::execute_pong(server),
-            MODE {target, mode}             => Self::execute_mode(target, mode),
-            TOPIC {channel, topic}          => Self::execute_topic(channel, topic),
-            WHO (target)                    => Self::execute_who(target),
-            WHOIS (targets)                 => Self::execute_whois(targets),
-            LIST (channels)                 => Self::execute_list(channels),
-            KICK {channel, user, reason}    => Self::execute_kick(channel, user, reason),
-            INVITE {nick, channel}          => Self::execute_invite(nick, channel),
+            NICK (nick)                     => self.execute_nick(nick),
+            USER {username, realname }      => self.execute_user(username, realname),
+            SERVER (server)                 => self.execute_server(server),
+            JOIN (channel)                  => self.execute_join(channel),
+            PART (channel)                  => self.execute_part(channel),
+            PRIVMSG {target, message}       => self.execute_privmsg(target, message),
+            NOTICE {target, message}        => self.execute_notice(target, message),
+            QUIT (message)                  => self.execute_quit(message),
+            PING (server)                   => self.execute_ping(server),
+            PONG (server)                   => self.execute_pong(server),
+            MODE {target, mode}             => self.execute_mode(target, mode),
+            TOPIC {channel, topic}          => self.execute_topic(channel, topic),
+            WHO (target)                    => self.execute_who(target),
+            WHOIS (targets)                 => self.execute_whois(targets),
+            LIST (channels)                 => self.execute_list(channels),
+            KICK {channel, user, reason}    => self.execute_kick(channel, user, reason),
+            INVITE {nick, channel}          => self.execute_invite(nick, channel),
         }
     }
 
-    pub fn execute_nick(nick: String) {
-        // TODO: implement NICK logic
+    pub fn execute_nick(&mut self, nick: String) {
+        self.nick = nick;
+
+        println!("You nickname now is: {}", self.nick);
     }
 
-    pub fn execute_user(username: String, realname: String) {
-        // TODO: implement USER logic
+    pub fn execute_user(&mut self, username: String, realname: String) {
+        self.username = username;
+        self.realname = realname;
+
+        println!("Your username now is: {}", self.username);
+        println!("Your realname now is: {}", self.realname);
     }
 
-    pub fn execute_join(channel: String) {
-        let connection = TcpStream::connect("irc.libera.chat:6667");
+    pub fn execute_server(&mut self, server: String) {
+        if let Ok(connection) = TcpStream::connect(server) {
+            self.connection = Some(connection);
 
-        println!("Connesso!");
+            if let Some(stream) = self.connection.as_mut() {
+                Self::send_command(stream, format!("NICK {}", self.nick));
+                Self::send_command(stream, format!("USER {} 0 * {}", self.username, self.realname));
+
+                let mut reader = BufReader::new(stream);
+                let mut line = String::new();
+
+                while let Ok(bytes) = reader.read_line(&mut line) {
+                    if bytes == 0 {
+                        break;
+                    }
+
+                    println!("{}", line);
+                    line.clear();
+                }
+            }
+        }
+        else {
+            eprintln!("Could not connect to the network, check the server address and port");
+        }
     }
 
-    pub fn execute_part(channel: String) {
+    pub fn execute_join(&self, channel: String) {
+
+    }
+
+    pub fn execute_part(&self, channel: String) {
         // TODO: implement PART logic
     }
 
-    pub fn execute_privmsg(target: String, message: String) {
+    pub fn execute_privmsg(&self, target: String, message: String) {
         // TODO: implement PRIVMSG logic
     }
 
-    pub fn execute_notice(target: String, message: String) {
+    pub fn execute_notice(&self, target: String, message: String) {
         // TODO: implement NOTICE logic
     }
 
-    pub fn execute_quit(message: String) {
+    pub fn execute_quit(&self, message: String) {
         // TODO: implement QUIT logic
     }
 
-    pub fn execute_ping(server: String) {
+    pub fn execute_ping(&self,server: String) {
         // TODO: implement PING logic
     }
 
-    pub fn execute_pong(server: String) {
+    pub fn execute_pong(&self, server: String) {
         // TODO: implement PONG logic
     }
 
-    pub fn execute_mode(target: String, mode: String) {
+    pub fn execute_mode(&self, target: String, mode: String) {
         // TODO: implement MODE logic
     }
 
-    pub fn execute_topic(channel: String, topic: String) {
+    pub fn execute_topic(&self, channel: String, topic: String) {
         // TODO: implement TOPIC logic
     }
 
-    pub fn execute_who(target: String) {
+    pub fn execute_who(&self, target: String) {
         // TODO: implement WHO logic
     }
 
-    pub fn execute_whois(targets: String) {
+    pub fn execute_whois(&self, targets: String) {
         // TODO: implement WHOIS logic
     }
 
-    pub fn execute_list(channels: String) {
+    pub fn execute_list(&self, channels: String) {
         // TODO: implement LIST logic
     }
 
-    pub fn execute_kick(channel: String, user: String, reason: String) {
+    pub fn execute_kick(&self, channel: String, user: String, reason: String) {
         // TODO: implement KICK logic
     }
 
-    pub fn execute_invite(nick: String, channel: String) {
+    pub fn execute_invite(&self, nick: String, channel: String) {
         // TODO: implement INVITE logic
+    }
+
+    fn send_command(stream: &mut TcpStream, command: String) -> std::io::Result<()> {
+        let full_command = format!("{}\r\n", command);
+        stream.write_all(full_command.as_bytes())?;
+
+        println!(">> {}", command);
+        Ok(())
     }
 }

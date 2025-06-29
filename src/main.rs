@@ -2,7 +2,13 @@ use std::io;
 use irc::IrcClient;
 
 fn main() {
-    let client = IrcClient::new();
+    let mut client = IrcClient::new();
+
+    println!("Usage:
+        \n 1. /NICK <nickname>
+        \n 2. /USER <username> <realname>
+        \n 3. /SERVER <server_name>:<port>"
+    );
 
     loop {
         let mut command = String::new();
@@ -13,7 +19,7 @@ fn main() {
             .unwrap();
 
         match client.parse_command(&command) {
-            Some(argv) => match client.lexer(&argv) {
+            Ok(argv) => match client.lexer(&argv) {
                 Ok(tokenized_cmd) => {
                     client.execute_command(tokenized_cmd);
                 }
@@ -23,8 +29,8 @@ fn main() {
                 }
             },
 
-            None => {
-                eprintln!("Error while parsing the command");
+            Err(e) => {
+                eprintln!("Error while parsing the command: \n{e}");
             }
         }
     }
