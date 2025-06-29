@@ -1,6 +1,7 @@
 #![allow(unused)]
 use std::collections::HashSet;
 use std::net::TcpStream;
+use std::thread;
 use std::io::{
     Write,
     BufRead,
@@ -176,6 +177,32 @@ impl IrcClient {
         }
     }
 
+    fn send_command(stream: &mut TcpStream, command: String) -> std::io::Result<()> {
+        let full_command = format!("{command}\r\n");
+        stream.write_all(full_command.as_bytes())?;
+
+        println!(">> {}", command);
+        Ok(())
+    }
+
+    fn listen_messages(stream: &mut TcpStream) {
+        let stream_clone = stream.try_clone().unwrap();
+
+        let mut reader = BufReader::new(stream_clone);
+        let mut line = String::new();
+
+        thread::spawn(move || {
+            while let Ok(bytes) = reader.read_line(&mut line) {
+                if bytes == 0 {
+                    break;
+                }
+
+                println!("{}", line);
+                line.clear();
+            }
+        });
+    }
+
     pub fn execute_nick(&mut self, nick: String) {
         self.nick = nick;
 
@@ -193,22 +220,12 @@ impl IrcClient {
     pub fn execute_server(&mut self, server: String) {
         if let Ok(connection) = TcpStream::connect(server) {
             self.connection = Some(connection);
-
+            
             if let Some(stream) = self.connection.as_mut() {
                 Self::send_command(stream, format!("NICK {}", self.nick));
                 Self::send_command(stream, format!("USER {} 0 * {}", self.username, self.realname));
 
-                let mut reader = BufReader::new(stream);
-                let mut line = String::new();
-
-                while let Ok(bytes) = reader.read_line(&mut line) {
-                    if bytes == 0 {
-                        break;
-                    }
-
-                    println!("{}", line);
-                    line.clear();
-                }
+                Self::listen_messages(stream);
             }
         }
         else {
@@ -216,8 +233,13 @@ impl IrcClient {
         }
     }
 
-    pub fn execute_join(&self, channel: String) {
-
+    pub fn execute_join(&mut self, channel: String) {
+        if let Some(stream) = self.connection.as_mut() {
+            Self::send_command(stream, format!("JOIN {channel}"));
+        }
+        else {
+            eprintln!("You are not connected to any network!");
+        }
     }
 
     pub fn execute_part(&self, channel: String) {
@@ -270,13 +292,5 @@ impl IrcClient {
 
     pub fn execute_invite(&self, nick: String, channel: String) {
         // TODO: implement INVITE logic
-    }
-
-    fn send_command(stream: &mut TcpStream, command: String) -> std::io::Result<()> {
-        let full_command = format!("{}\r\n", command);
-        stream.write_all(full_command.as_bytes())?;
-
-        println!(">> {}", command);
-        Ok(())
     }
 }

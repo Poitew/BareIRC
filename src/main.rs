@@ -7,13 +7,13 @@ fn main() {
     println!("Usage:
         \n 1. /NICK <nickname>
         \n 2. /USER <username> <realname>
-        \n 3. /SERVER <server_name>:<port>"
+        \n 3. /SERVER <hostname>:<port>"
     );
 
     loop {
         let mut command = String::new();
 
-        println!("\nEnter a command: ");
+        println!("\nEnter command: ");
         io::stdin()
             .read_line(&mut command)
             .unwrap();
