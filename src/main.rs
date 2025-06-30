@@ -10,7 +10,7 @@ fn main() {
         \n 3. /SERVER <hostname>:<port>"
     );
 
-    loop {
+    while client.active {
         let mut command = String::new();
 
         println!("\nEnter command: ");
@@ -34,4 +34,6 @@ fn main() {
             }
         }
     }
+
+    println!("Bye!");
 }
