@@ -12,6 +12,9 @@ use ratatui::{
 
     widgets::{
         Paragraph,
+        Borders,
+        Block,
+        BorderType
     },
 
     crossterm::event::{
@@ -43,7 +46,7 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
             }
         }
 
-        
+
         if irc.lines.len() > 25 {
             irc.lines.drain(0..20);
         }
@@ -51,17 +54,29 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
 
         terminal.draw(|frame| {
             let vertical_layout = Layout::vertical([
-                Constraint::Percentage(10), 
+                Constraint::Percentage(15), 
                 Constraint::Percentage(80), 
-                Constraint::Percentage(10)]
+                Constraint::Percentage(5)]
             );
 
             let [title_area, text_area, input_area] = vertical_layout.areas(frame.area());
 
-            let title = Paragraph::new("IRC client").centered();
+            let title_art = r#"
+ ___               ___ ___  ___ 
+| _ ) __ _ _ _ ___|_ _| _ \/ __|
+| _ \/ _` | '_/ -_)| ||   / (__ 
+|___/\__,_|_| \___|___|_|_\\___|
+            "#;
+
+            let title = Paragraph::new(title_art).centered();
 
             let buf_content = irc.lines.join("\n");
-            let text = Paragraph::new(buf_content);
+            let text = Paragraph::new(buf_content).
+                block(Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .title("Chat")
+                ); 
 
             frame.render_widget(title, title_area);
             frame.render_widget(text, text_area);
