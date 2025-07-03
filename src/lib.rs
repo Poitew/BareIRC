@@ -1,6 +1,7 @@
-#![allow(unused)]
+#![allow(unused_must_use)]
 use std::collections::HashSet;
 use std::net::TcpStream;
+use std::sync::mpsc;
 use std::thread;
 use std::io::{
     Write,
@@ -28,8 +29,11 @@ pub enum COMMAND {
     INVITE {nick: String, channel: String},
 }
 
+
 pub struct IrcClient {
     pub active: bool,
+    pub lines: Vec<String>,
+    pub rx: Option<mpsc::Receiver<String>>,
     nick: String,
     username: String,
     realname: String,
@@ -39,12 +43,14 @@ pub struct IrcClient {
 impl IrcClient {
     pub fn new() -> Self {
         let active = true;
+        let lines: Vec<String> = Vec::new();
+        let rx = None;
         let nick = String::new();
         let username = String::new();
         let realname = String::new();
         let connection = None;
 
-        IrcClient{active, nick, username, realname, connection}
+        IrcClient{ active, lines, rx, nick, username, realname, connection }
     }
 
     pub fn parse_command(&self, input: &String) -> Result<Vec<String>, String> {
@@ -59,7 +65,15 @@ impl IrcClient {
         if let Some(cmd) = input.strip_prefix('/') {
             let argv: Vec<String> = cmd
                 .split_whitespace()
-                .map(|s| s.to_uppercase())
+                .enumerate()
+                .map(|(i, s)| {
+                    if i == 0 {
+                        s.to_uppercase()
+                    } 
+                    else {
+                        s.to_string()
+                    }
+                })
                 .collect();
             
             if let Some(command) = argv.first() {
@@ -112,15 +126,23 @@ impl IrcClient {
 
             "PART"      => Ok(PART(arg!(1))),
 
-            "PRIVMSG"   => Ok(PRIVMSG {
-                target: arg!(1),
-                message: arg!(2),
-            }),
+            "PRIVMSG"   => {
+                let message = &argv[2..].join(" ");
 
-            "NOTICE"    => Ok(NOTICE {
-                target: arg!(1),
-                message: arg!(2),
-            }),
+                Ok(PRIVMSG {
+                    target: arg!(1),
+                    message: message.to_string(),
+                })
+            },
+
+            "NOTICE"    => {
+                let message = &argv[2..].join(" ");
+
+                Ok(PRIVMSG {
+                    target: arg!(1),
+                    message: message.to_string(),
+                })
+            },
 
             "QUIT"      => Ok(QUIT(arg!(1))),
 
@@ -185,25 +207,28 @@ impl IrcClient {
     fn send_command(stream: &mut TcpStream, command: String) -> std::io::Result<()> {
         let full_command = format!("{command}\r\n");
         stream.write_all(full_command.as_bytes())?;
-
-        println!(">> {}", command);
+        
         Ok(())
     }
 
-    fn listen_messages(stream: &mut TcpStream) {
+    fn listen_messages(&mut self, stream: &mut TcpStream) {
         let stream_clone = stream.try_clone().unwrap();
-
         let mut reader = BufReader::new(stream_clone);
-        let mut line = String::new();
+
+        let (tx, rx) = mpsc::channel::<String>();
+        self.rx = Some(rx);
 
         thread::spawn(move || {
-            while let Ok(bytes) = reader.read_line(&mut line) {
+            let mut lines_buf = String::new();
+
+            while let Ok(bytes) = reader.read_line(&mut lines_buf) {
                 if bytes == 0 {
                     break;
                 }
 
-                println!("{}", line);
-                line.clear();
+                tx.send(lines_buf.clone()).unwrap();
+
+                lines_buf.clear();
             }
         });
     }
@@ -216,16 +241,17 @@ impl IrcClient {
             f(stream);
         } 
         else {
-            eprintln!("You are not connected to any network!");
+            self.lines.push("You are not connected to any network!".to_string());
         }
     }
 
 
 
-    // Commands executor
+    // Commands executors
     pub fn execute_exit(&mut self) {
         self.active = false;
     }
+
 
     pub fn execute_help(&mut self) {
         println!("\t/nick <nickname>: set personal nickname.");
@@ -244,10 +270,11 @@ impl IrcClient {
         println!("\t/invite <nickname> <channel>: invite <nickname> to <channel>.");
     }
 
+
     pub fn execute_nick(&mut self, nick: String) {
         self.nick = nick;
 
-        println!("You nickname now is: {}", self.nick);
+        self.lines.push(format!("You nickname now is: {}", self.nick));
     }
 
 
@@ -255,24 +282,23 @@ impl IrcClient {
         self.username = username;
         self.realname = realname;
 
-        println!("Your username now is: {}", self.username);
-        println!("Your realname now is: {}", self.realname);
+        self.lines.push(format!("Your username now is: {}", self.username));
+        self.lines.push(format!("Your realname now is: {}", self.realname));
     }
 
 
     pub fn execute_server(&mut self, server: String) {
-        if let Ok(connection) = TcpStream::connect(server) {
+        if let Ok(mut connection) = TcpStream::connect(server) {
+            self.listen_messages(&mut connection);   
             self.connection = Some(connection);
             
             if let Some(stream) = self.connection.as_mut() {
                 Self::send_command(stream, format!("NICK {}", self.nick));
                 Self::send_command(stream, format!("USER {} 0 * {}", self.username, self.realname));
-
-                Self::listen_messages(stream);
             }
         }
         else {
-            eprintln!("Could not connect to the network, check the server address and port");
+            self.lines.push("Could not connect to the network, check the server address and port".to_string());
         }
     }
 
@@ -280,16 +306,18 @@ impl IrcClient {
     pub fn execute_join(&mut self, channel: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("JOIN {channel}"));
-            println!("Joined {channel}");
-        })
+        });
+
+        self.lines.push(format!("Joined {channel}"));
     }
 
 
     pub fn execute_part(&mut self, channel: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("PART {channel}"));
-            println!("You have left {channel}");
-        })
+        });
+
+        self.lines.push(format!("You have left {channel}"));
     }
 
 
@@ -298,8 +326,9 @@ impl IrcClient {
 
         self.with_stream(|stream| {
             Self::send_command(stream, format!("PRIVMSG {target} :{message}"));
-            println!("<{}> {}: {}", nick, target , message);
-        })
+        });
+
+        self.lines.push(format!("<{nick}> {target}: {message}"));
     }
 
 
@@ -308,61 +337,68 @@ impl IrcClient {
 
         self.with_stream(|stream| {
             Self::send_command(stream, format!("NOTICE {target} :{message}"));
-            println!("<{}> {}: {}", nick, target , message);
-        })
+        });
+
+        self.lines.push(format!("<{nick}> {target}: {message}"));
     }
 
 
     pub fn execute_quit(&mut self, message: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("QUIT {message}"));
-            println!("Quitting...");
-        })
+        });
+
+        self.lines.push("Quitting...".to_string());
     }
+
 
     pub fn execute_mode(&mut self, target: String, mode: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("MODE {target} {mode}"));
-        })
+        });
     }
+
 
     pub fn execute_topic(&mut self, channel: String, topic: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("TOPIC {channel} {topic}"));
-            println!("Change {channel} topic to '{topic}'");
-        })
+        });
+
+        self.lines.push(format!("Change {channel} topic to '{topic}'"));
     }
+
 
     pub fn execute_who(&mut self, target: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("WHO {target}"));
-            println!("List: ");
-        })
+        });
     }
+
 
     pub fn execute_whois(&mut self, targets: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("WHOIS {targets}"));
-            println!("List: ");
-        })
+        });
     }
+
 
     pub fn execute_list(&mut self) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("LIST"));
-            println!("List: ");
-        })
+        });
     }
+
 
     pub fn execute_kick(&mut self, channel: String, user: String, reason: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("KICK {channel} {user} :{reason}"));
-        })
+        });
     }
+
 
     pub fn execute_invite(&mut self, nick: String, channel: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("INVITE {nick} {channel}"));
-        })
+        });
     }
 }

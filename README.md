@@ -4,11 +4,15 @@ Another IRC client!
 Written in Rust.
 
 ---
+# Help
+To connect to a network you first need to have set a nickname, username, and realname.
+To do so, simply use the `NICK` command, and the `USER` command.
 
+---
 # Commands
 
 Commands are case-insensitive.  
-This means that **/join**, **/Join**, **/JOIN** (and all the other combinations) are all valid command.
+This means that **/join**, **/Join**, **/JOIN** (and all the other combinations) are all valid commands.
 
 +   `/nick <nickname>`: set personal nickname.
 +   `/user <username> <realname>`: set personal username and realname.
@@ -27,6 +31,6 @@ This means that **/join**, **/Join**, **/JOIN** (and all the other combinations)
 
 
 Client side commands:
-+   `/exit`: exits the client.
++   `/exit`: exits the client. Alternatively pressing the <Esc> button does the same.
 +   `/help`: list all the available commands.
 
