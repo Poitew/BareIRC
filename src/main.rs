@@ -14,7 +14,6 @@ use ratatui::{
         Paragraph,
         Borders,
         Block,
-        BorderType
     },
 
     crossterm::event::{
@@ -54,32 +53,51 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
 
         terminal.draw(|frame| {
             let vertical_layout = Layout::vertical([
+                Constraint::Percentage(20),
+                Constraint::Percentage(80),
+            ]);
+
+            let horizontal_layout = Layout::horizontal([
                 Constraint::Percentage(15), 
-                Constraint::Percentage(80), 
-                Constraint::Percentage(5)]
-            );
+                Constraint::Percentage(85),
+            ]).spacing(2);
 
-            let [title_area, text_area, input_area] = vertical_layout.areas(frame.area());
+            let vertical_layout_main = Layout::vertical([
+                Constraint::Percentage(85),
+                Constraint::Percentage(15),
+            ]);
 
-            let title_art = r#"
+            let [title_area, main_area] = vertical_layout.areas(frame.area());
+            let [channel_area, text_area] = horizontal_layout.areas(main_area);
+            let [log_area, input_area] = vertical_layout_main.areas(text_area);
+
+
+
+            let title = Paragraph::new(r#"
  ___               ___ ___  ___ 
 | _ ) __ _ _ _ ___|_ _| _ \/ __|
 | _ \/ _` | '_/ -_)| ||   / (__ 
 |___/\__,_|_| \___|___|_|_\\___|
-            "#;
-
-            let title = Paragraph::new(title_art).centered();
+            "#)
+            .centered()
+            .block(Block::default()
+                .borders(Borders::BOTTOM)
+            );
 
             let buf_content = irc.lines.join("\n");
-            let text = Paragraph::new(buf_content).
+            let text = Paragraph::new(buf_content);
+
+            let buf_content = irc.channels.join("\n\n");
+            let channels = Paragraph::new(buf_content).
                 block(Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .title("Chat")
-                ); 
+                    .borders(Borders::RIGHT)
+                );
+
+
 
             frame.render_widget(title, title_area);
-            frame.render_widget(text, text_area);
+            frame.render_widget(channels, channel_area);
+            frame.render_widget(text, log_area);
             frame.render_widget(&textarea, input_area);
         })?;
 
