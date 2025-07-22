@@ -14,6 +14,7 @@ use ratatui::{
         Paragraph,
         Borders,
         Block,
+        Wrap,
     },
 
     crossterm::event::{
@@ -46,15 +47,15 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
         }
 
 
-        if irc.lines.len() > 25 {
-            irc.lines.drain(0..20);
+        if irc.lines.len() > 250 {
+            irc.lines.drain(0..50);
         }
 
 
         terminal.draw(|frame| {
             let vertical_layout = Layout::vertical([
-                Constraint::Percentage(20),
-                Constraint::Percentage(80),
+                Constraint::Percentage(15),
+                Constraint::Percentage(85),
             ]);
 
             let horizontal_layout = Layout::horizontal([
@@ -84,8 +85,12 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
                 .borders(Borders::BOTTOM)
             );
 
+
             let buf_content = irc.lines.join("\n");
-            let text = Paragraph::new(buf_content);
+            
+            let text = Paragraph::new(buf_content)
+            .wrap(Wrap { trim: false })
+            .scroll((irc.scroll_offset, 0));
 
             let buf_content = irc.channels.join("\n\n");
             let channels = Paragraph::new(buf_content).
@@ -106,6 +111,14 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
             if let Event::Key(key) = read()? {
                 if key.code == KeyCode::Esc {
                     irc.active = false;
+                }
+
+                if key.code == KeyCode::Up {
+                    irc.scroll_offset = irc.scroll_offset.saturating_sub(1);
+                }
+
+                if key.code == KeyCode::Down {
+                    irc.scroll_offset = irc.scroll_offset.saturating_add(1);
                 }
 
                 if key.code == KeyCode::Enter {

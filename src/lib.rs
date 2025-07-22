@@ -34,6 +34,8 @@ pub struct IrcClient {
     pub active: bool,
     pub lines: Vec<String>,
     pub rx: Option<mpsc::Receiver<String>>,
+    pub channels: Vec<String>,
+    pub scroll_offset: u16,
     nick: String,
     username: String,
     realname: String,
@@ -45,12 +47,14 @@ impl IrcClient {
         let active = true;
         let lines: Vec<String> = Vec::new();
         let rx = None;
+        let channels: Vec<String> = Vec::new();
+        let scroll_offset = 0;
         let nick = String::new();
         let username = String::new();
         let realname = String::new();
         let connection = None;
 
-        IrcClient{ active, lines, rx, nick, username, realname, connection }
+        IrcClient{ active, lines, rx, channels, scroll_offset, nick, username, realname, connection }
     }
 
     pub fn parse_command(&self, input: &String) -> Result<Vec<String>, String> {
@@ -233,15 +237,17 @@ impl IrcClient {
         });
     }
     
-    fn with_stream<F>(&mut self, f: F)
+    fn with_stream<F>(&mut self, f: F) -> bool
     where
         F: FnOnce(&mut TcpStream),
     {
         if let Some(stream) = self.connection.as_mut() {
             f(stream);
+            true
         } 
         else {
             self.lines.push("You are not connected to any network!".to_string());
+            false
         }
     }
 
@@ -254,20 +260,20 @@ impl IrcClient {
 
 
     pub fn execute_help(&mut self) {
-        println!("\t/nick <nickname>: set personal nickname.");
-        println!("\t/user <username> <realname>: set personal username and realname.");
-        println!("\t/server <hostname>:<port>: join a network, requires to have nickname, username, and realname already set.");
-        println!("\t/join #<server>: join a server, all server must start with an hash sign.");
-        println!("\t/privmsg #<target> <message>: send a message in the specified server, or to the specified user.");
-        println!("\t/notice #<target> <message>: send a message in the specified server, or to the specified user.");
-        println!("\t/part #<server>: leave the specified <server>.");
-        println!("\t/quit #<reason>: leave the network, <reason> is mandatory.");
-        println!("\t/topic #<channel> #<topic>: changes the topic for the specified server (channel).");
-        println!("\t/who <target>: return a list of users who match <target>.");
-        println!("\t/whois <users>: print infos about the comma-separated list of users.");
-        println!("\t/list: list all the servers in the current network.");
-        println!("\t/kick <channel> <target> :<reason>: kick <target> from <channel> with the given <reason>.");
-        println!("\t/invite <nickname> <channel>: invite <nickname> to <channel>.");
+        self.lines.push("\t/nick <nickname>: set personal nickname.\n".to_string());
+        self.lines.push("\t/user <username> <realname>: set personal username and realname.\n".to_string());
+        self.lines.push("\t/server <hostname>:<port>: join a network, requires to have nickname, username, and realname already set.\n".to_string());
+        self.lines.push("\t/join #<server>: join a server, all server must start with an hash sign.\n".to_string());
+        self.lines.push("\t/privmsg #<target> <message>: send a message in the specified server, or to the specified user.\n".to_string());
+        self.lines.push("\t/notice #<target> <message>: send a message in the specified server, or to the specified user.\n".to_string());
+        self.lines.push("\t/part #<server>: leave the specified <server>.\n".to_string());
+        self.lines.push("\t/quit #<reason>: leave the network, <reason> is mandatory.\n".to_string());
+        self.lines.push("\t/topic #<channel> #<topic>: changes the topic for the specified server (channel).\n".to_string());
+        self.lines.push("\t/who <target>: return a list of users who match <target>.\n".to_string());
+        self.lines.push("\t/whois <users>: print infos about the comma-separated list of users.\n".to_string());
+        self.lines.push("\t/list: list all the servers in the current network.\n".to_string());
+        self.lines.push("\t/kick <channel> <target> :<reason>: kick <target> from <channel> with the given <reason>.\n".to_string());
+        self.lines.push("\t/invite <nickname> <channel>: invite <nickname> to <channel>.\n".to_string());
     }
 
 
@@ -304,42 +310,48 @@ impl IrcClient {
 
 
     pub fn execute_join(&mut self, channel: String) {
-        self.with_stream(|stream| {
+        if self.with_stream(|stream| {
             Self::send_command(stream, format!("JOIN {channel}"));
-        });
-
-        self.lines.push(format!("Joined {channel}"));
+        }) {
+            self.channels.push(channel.clone());
+            self.lines.push(format!("Joined {channel}"));
+        }
     }
 
 
     pub fn execute_part(&mut self, channel: String) {
-        self.with_stream(|stream| {
+        if self.with_stream(|stream| {
             Self::send_command(stream, format!("PART {channel}"));
-        });
-
-        self.lines.push(format!("You have left {channel}"));
+        }) {
+            if self.channels.contains(&channel) {
+                self.channels.retain(|c| c != &channel.to_string());
+                self.lines.push(format!("You have left {channel}"));
+            }
+        }
     }
 
 
     pub fn execute_privmsg(&mut self, target: String, message: String) {
-        let nick = self.nick.clone();
-
-        self.with_stream(|stream| {
+        if self.with_stream(|stream| {
             Self::send_command(stream, format!("PRIVMSG {target} :{message}"));
-        });
-
-        self.lines.push(format!("<{nick}> {target}: {message}"));
+        }) {
+            if self.channels.contains(&target) {
+                let nick = self.nick.clone();
+                self.lines.push(format!("<{nick}> {target}: {message}"));
+            }
+        }
     }
 
 
     pub fn execute_notice(&mut self, target: String, message: String) {
-        let nick = self.nick.clone();
-
-        self.with_stream(|stream| {
+        if self.with_stream(|stream| {
             Self::send_command(stream, format!("NOTICE {target} :{message}"));
-        });
-
-        self.lines.push(format!("<{nick}> {target}: {message}"));
+        }) {
+            if self.channels.contains(&target) {
+                let nick = self.nick.clone();
+                self.lines.push(format!("<{nick}> {target}: {message}"));
+            }
+        }
     }
 
 
@@ -349,6 +361,9 @@ impl IrcClient {
         });
 
         self.lines.push("Quitting...".to_string());
+
+        ratatui::restore();
+        std::process::exit(0);
     }
 
 
@@ -360,11 +375,13 @@ impl IrcClient {
 
 
     pub fn execute_topic(&mut self, channel: String, topic: String) {
-        self.with_stream(|stream| {
+        if self.with_stream(|stream| {
             Self::send_command(stream, format!("TOPIC {channel} {topic}"));
-        });
-
-        self.lines.push(format!("Change {channel} topic to '{topic}'"));
+        }) {
+            if self.channels.contains(&channel) {
+                self.lines.push(format!("Changed {channel} topic to '{topic}'"));
+            }
+        }
     }
 
 
