@@ -23,29 +23,29 @@ Commands are case insensitive and start with the `/` character:
 
 +   `/join #<server>`: Join a server, all server must start with an hash sign.
 
-+   `/privmsg #<target> <message>`: Send a message in the specified server, or to the specified user.
++   `/privmsg #<target> <message>`: Send a \<message> to \<target>.
 
-+   `/notice #<target> <message>`: Send a message in the specified server, or to the specified user.
++   `/notice #<target> <message>`: Send a \<message> to \<target>.
 
-+   `/part #<server>`: Leave the specified <server>.
++   `/part #<server>`: Leave the specified \<server>.
 
-+   `/quit #<reason>`: Leave the network, <reason> is mandatory.
++   `/quit #<reason>`: Leave the network, \<reason> is mandatory.
 
 +   `/topic #<channel> #<topic>`: Changes the topic for the specified server (channel).
 
-+   `/who <target>`: Return a list of users who match <target>.
++   `/who <target>`: Return a list of users who match \<target>.
 
 +   `/whois <users>`: Print infos about the comma-separated list of users.
 
 +   `/list`: List all the servers in the current network.
 
-+   `/kick <channel> <target> :<reason>`: Kick <target> from <channel> with the given <reason>.
++   `/kick <channel> <target> :<reason>`: Kick \<target> from \<channel> with the given \<reason>.
 
-+   `/invite <nickname> <channel>`: Invite <nickname> to <channel>.
++   `/invite <nickname> <channel>`: Invite \<nickname> to \<channel>.
 
 
 Client side commands:
-+   `/exit`: Exits the client. Alternatively, pressing the <Esc> button does the same.
++   `/exit`: Exits the client. Alternatively, pressing the \<Esc> button does the same.
 
 +   `/help`: List all the available commands.
 
@@ -60,6 +60,19 @@ Client side commands:
 
 &nbsp;
 
-# ToDo
-+ Add autoscroll.
+# Changelog
++ **0.2.5**
+    + Auto scroll feature
+    + Bug Fixes
+    + Added Changelog
+
++ ***0.2***
+    + TUI improvement
+    + Bug Fixes
+
++ **0.1**  
+    + Release
+
+
+# To-Do
 + Proper TUI (colored usernames...).

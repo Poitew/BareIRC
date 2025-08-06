@@ -29,6 +29,7 @@ use tui_textarea::TextArea;
 
 fn main() {
     let mut client = IrcClient::new();
+    client.send_message("\n".to_string());
     let mut terminal = ratatui::init();
 
     run(&mut terminal, &mut client);
@@ -40,12 +41,18 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
     let mut textarea = TextArea::default();
 
     while irc.active {
-        if let Some(rx) = &irc.rx {
-            while let Ok(response) = rx.try_recv() {
-                irc.lines.push(response);
-            }
-        }
+        irc.auto_scroll = true;
 
+        let messages: Vec<_> = if let Some(rx) = &irc.rx {
+            std::iter::from_fn(|| rx.try_recv().ok()).collect()
+        } 
+        else {
+            vec![]
+        };
+
+        for msg in messages {
+            irc.send_message(msg);
+        }
 
         if irc.lines.len() > 250 {
             irc.lines.drain(0..50);
@@ -86,7 +93,7 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
             );
 
 
-            let buf_content = irc.lines.join("\n");
+            let buf_content = irc.lines.join("");
             
             let text = Paragraph::new(buf_content)
             .wrap(Wrap { trim: false })
@@ -114,11 +121,12 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
                 }
 
                 if key.code == KeyCode::Up {
+                    irc.auto_scroll = false;
                     irc.scroll_offset = irc.scroll_offset.saturating_sub(1);
                 }
 
                 if key.code == KeyCode::Down {
-                    irc.scroll_offset = irc.scroll_offset.saturating_add(1);
+                    irc.scroll_offset += 1;
                 }
 
                 if key.code == KeyCode::Enter {
@@ -132,12 +140,12 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
                             }
 
                             Err(_) => {
-                                irc.lines.push("Error while lexing the command, check the number of arguments".to_string());
+                                irc.send_message("Error while lexing the command, check the number of arguments\n".to_string());
                             }
                         },
 
                         Err(e) => {
-                            irc.lines.push(e);
+                            irc.send_message(e);
                         }
                     }
                 }
@@ -146,7 +154,7 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
                 }
             }
         }
-
     }
+
     Ok(())
 }
