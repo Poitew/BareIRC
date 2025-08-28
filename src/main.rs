@@ -1,6 +1,10 @@
 #![allow(unused_must_use)]
-use std::io;
+mod irc;
 use irc::IrcClient;
+
+mod command;
+
+use std::io;
 use std::time::Duration;
 use ratatui::{
     DefaultTerminal,
@@ -43,12 +47,16 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
     while irc.active {
         irc.auto_scroll = true;
 
-        let messages: Vec<_> = if let Some(rx) = &irc.rx {
-            std::iter::from_fn(|| rx.try_recv().ok()).collect()
-        } 
-        else {
-            vec![]
+        let messages: Vec<_> = match &irc.rx {
+            Some(rx) => {
+                std::iter::from_fn(|| rx.try_recv().ok()).collect()
+            }
+
+            None => {
+                Vec::new()
+            }
         };
+
 
         for msg in messages {
             irc.send_message(msg);
@@ -60,44 +68,27 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
 
 
         terminal.draw(|frame| {
-            let vertical_layout = Layout::vertical([
-                Constraint::Percentage(15),
-                Constraint::Percentage(85),
-            ]);
-
             let horizontal_layout = Layout::horizontal([
                 Constraint::Percentage(15), 
                 Constraint::Percentage(85),
-            ]).spacing(2);
+            ]);
 
-            let vertical_layout_main = Layout::vertical([
+            let vertical_layout = Layout::vertical([
                 Constraint::Percentage(85),
                 Constraint::Percentage(15),
             ]);
 
-            let [title_area, main_area] = vertical_layout.areas(frame.area());
-            let [channel_area, text_area] = horizontal_layout.areas(main_area);
-            let [log_area, input_area] = vertical_layout_main.areas(text_area);
-
-
-
-            let title = Paragraph::new(r#"
- ___               ___ ___  ___ 
-| _ ) __ _ _ _ ___|_ _| _ \/ __|
-| _ \/ _` | '_/ -_)| ||   / (__ 
-|___/\__,_|_| \___|___|_|_\\___|
-            "#)
-            .centered()
-            .block(Block::default()
-                .borders(Borders::BOTTOM)
-            );
-
+            let [channel_area, text_area] = horizontal_layout.areas(frame.area());
+            let [log_area, input_area] = vertical_layout.areas(text_area);
 
             let buf_content = irc.lines.join("");
-            
             let text = Paragraph::new(buf_content)
-            .wrap(Wrap { trim: false })
-            .scroll((irc.scroll_offset, 0));
+                .wrap(Wrap { trim: false })
+                .scroll((irc.scroll_offset, 0))
+                .block(Block::default()
+                    .borders(Borders::BOTTOM)
+                );
+
 
             let buf_content = irc.channels.join("\n\n");
             let channels = Paragraph::new(buf_content).
@@ -105,9 +96,6 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
                     .borders(Borders::RIGHT)
                 );
 
-
-
-            frame.render_widget(title, title_area);
             frame.render_widget(channels, channel_area);
             frame.render_widget(text, log_area);
             frame.render_widget(&textarea, input_area);
@@ -126,7 +114,9 @@ fn run(terminal: &mut DefaultTerminal, irc: &mut IrcClient) -> io::Result<()> {
                 }
 
                 if key.code == KeyCode::Down {
-                    irc.scroll_offset += 1;
+                    if usize::from(irc.scroll_offset) < irc.lines.len() {
+                        irc.scroll_offset += 1;
+                    }
                 }
 
                 if key.code == KeyCode::Enter {

@@ -1,6 +1,11 @@
 #![allow(unused_must_use)]
+use super::command;
+use command::COMMAND;
 use std::collections::HashSet;
-use std::net::TcpStream;
+use std::net::{
+    Shutdown,
+    TcpStream
+};
 use std::sync::mpsc;
 use std::thread;
 use std::io::{
@@ -8,27 +13,6 @@ use std::io::{
     BufRead,
     BufReader,
 };
-
-pub enum COMMAND {
-    EXIT,
-    HELP,
-    NICK (String),
-    USER {username: String, realname: String},
-    SERVER (String),
-    JOIN (String),
-    PART (String),
-    PRIVMSG {target: String, message: String},
-    NOTICE {target: String, message: String},
-    QUIT (String),
-    MODE {target: String, mode: String},
-    TOPIC {channel: String, topic: String},
-    WHO (String),
-    WHOIS (String), 
-    LIST, 
-    KICK {channel: String, user: String, reason: String}, 
-    INVITE {nick: String, channel: String},
-}
-
 
 pub struct IrcClient {
     pub active: bool,
@@ -48,7 +32,7 @@ impl IrcClient {
         let active = true;
         let lines: Vec<String> = Vec::new();
         let rx = None;
-        let channels: Vec<String> = Vec::new();
+        let channels: Vec<String> = vec!["Channels:".to_string()];
         let scroll_offset = 0;
         let auto_scroll = true;
         let nick = String::new();
@@ -144,7 +128,7 @@ impl IrcClient {
             "NOTICE"    => {
                 let message = &argv[2..].join(" ");
 
-                Ok(PRIVMSG {
+                Ok(NOTICE {
                     target: arg!(1),
                     message: message.to_string(),
                 })
@@ -291,7 +275,7 @@ impl IrcClient {
     pub fn execute_nick(&mut self, nick: String) {
         self.nick = nick;
 
-        self.send_message(format!("You nickname now is: {}\n", self.nick));
+        self.send_message(format!("Your nickname now is: {}\n", self.nick));
     }
 
 
@@ -324,8 +308,13 @@ impl IrcClient {
         if self.with_stream(|stream| {
             Self::send_command(stream, format!("JOIN {channel}"));
         }) {
-            self.channels.push(channel.clone());
-            self.send_message(format!("Joined {channel}\n"));
+            if channel.chars().next() == Some('#') {
+                self.channels.push(channel.clone());
+                self.send_message(format!("Joined {channel}\n"));
+            }
+            else {
+                self.send_message(format!("Channels starts with a #\n"))
+            }
         }
     }
 
@@ -369,8 +358,10 @@ impl IrcClient {
     pub fn execute_quit(&mut self, message: String) {
         self.with_stream(|stream| {
             Self::send_command(stream, format!("QUIT {message}"));
+            stream.shutdown(Shutdown::Both)
+                .expect("Shutdown failed");
         });
-
+        
         self.send_message("Quitting...\n".to_string());
 
         ratatui::restore();

@@ -61,7 +61,12 @@ Client side commands:
 &nbsp;
 
 # Changelog
-+ **0.2.5**
++ ***3.0***
+    + File structure changes
+    + Bug Fixes
+    + TUI changes
+
++ ***0.2.5***
     + Auto scroll feature
     + Bug Fixes
     + Added Changelog
@@ -70,7 +75,7 @@ Client side commands:
     + TUI improvement
     + Bug Fixes
 
-+ **0.1**  
++ ***0.1***
     + Release
 
 
