@@ -61,7 +61,7 @@ Client side commands:
 &nbsp;
 
 # Changelog
-+ ***3.0***
++ ***0.3.0***
     + File structure changes
     + Bug Fixes
     + TUI changes
